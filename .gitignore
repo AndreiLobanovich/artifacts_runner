@@ -1,0 +1,6 @@
+.env
+.venv
+python-client-generated
+.idea
+*/__pycache__*/
+__pycache__

@@ -1,0 +1,8 @@
+MOVE = "/my/{name}/action/move"
+NEW_TASK = "/my/{name}/action/task/new"
+FIGHT = "/my/{name}/action/fight"
+GATHER_RESOURCE = "/my/{name}/action/gathering"
+UNEQUIP = "/my/{name}/action/unequip"
+CRAFT = "/my/{name}/action/crafting"
+CHARACTER_INFO = "/my/characters"
+ITEM_INFO = "/items/{code}"
