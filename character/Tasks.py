@@ -81,4 +81,4 @@ class DepositTask(Task):
             if not amount:
                 continue
             with open(f"logs/{character_name}.log", "a", encoding="utf-8") as logfile:
-                logfile.write(f"    Deposited {amount} {item}")
+                logfile.write(f"    Deposited {amount} {item}\n")

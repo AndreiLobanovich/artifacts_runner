@@ -37,10 +37,10 @@ async def main():
         ),
         execute_tasks(
             char_names[1],
-            GatherTask(36, Locations.ASHWOOD_MINE, "ash_wood"),
+            GatherTask(38, Locations.ASHWOOD_MINE, "ash_wood"),
             ProcessingTask(6, Locations.WOODCUTTING_BENCH, "ash_plank"),
             ProcessingTask(2, Locations.GEAR_CRAFT_BENCH, "wooden_shield"),
-            DepositTask("wooden_shield")
+            DepositTask("wooden_shield", "ash_plank", "ash_wood")
         ),
         execute_tasks(
             char_names[2],
