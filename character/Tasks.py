@@ -80,5 +80,6 @@ class DepositTask(Task):
             amount = self._get_collected_amount(client, character_name, item=item)
             if not amount:
                 continue
+            await client.deposit_item_in_bank(character_name, item, amount)
             with open(f"logs/{character_name}.log", "a", encoding="utf-8") as logfile:
                 logfile.write(f"    Deposited {amount} {item}\n")
