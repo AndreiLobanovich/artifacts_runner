@@ -30,7 +30,7 @@ class ArtifactsAPI:
         return requests.get(self.ROOT_URL + url, headers=self.headers)
 
     @task
-    def move(self, x, y, name, url=MOVE):
+    def move(self, name, x, y, url=MOVE):
         data = {
             "x": x,
             "y": y
@@ -38,31 +38,39 @@ class ArtifactsAPI:
         return self._post(url.replace("{name}", name), data)
 
     @task
-    def fight(self, name, url=FIGHT):
-        return self._post(url.replace("{name}", name))
+    def deposit_item_in_bank(self, name, item_code, qtt):
+        data = {
+            "code": item_code,
+            "quantity": qtt
+        }
+        return self._post(BANK_DEPOSIT.replace("{name}", name), data=data)
 
     @task
-    def gather_resource(self, name, url=GATHER_RESOURCE):
-        return self._post(url.replace("{name}", name))
+    def fight(self, name):
+        return self._post(FIGHT.replace("{name}", name))
 
     @task
-    def craft(self, name, url=CRAFT, qtt=1, code="copper_dagger"):
+    def gather_resource(self, name):
+        return self._post(GATHER_RESOURCE.replace("{name}", name))
+
+    @task
+    def craft(self, name, qtt=1, code="copper_dagger"):
         data = {
             "code": code,
             "quantity": qtt
         }
-        return self._post(url.replace("{name}", name), data=data)
+        return self._post(CRAFT.replace("{name}", name), data=data)
 
     @task
-    def get_new_task(self, name, url=NEW_TASK):
-        return self._post(url.replace("{name}", name))
+    def get_new_task(self, name):
+        return self._post(NEW_TASK.replace("{name}", name))
 
     @task
-    def unequip(self, name, url=UNEQUIP, slot=Slots.WEAPON):
+    def unequip(self, name, slot=Slots.WEAPON):
         data = {
             "slot": slot.value
         }
-        return self._post(url.replace("{name}", name), data=data)
+        return self._post(UNEQUIP.replace("{name}", name), data=data)
 
     def get_char_inventory(self, name):
         data = self._get(CHARACTER_INFO).json()["data"]

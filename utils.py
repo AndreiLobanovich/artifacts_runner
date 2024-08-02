@@ -1,4 +1,7 @@
 import asyncio
+import os
+import shutil
+import sys
 from enum import Enum
 from functools import wraps
 
@@ -6,25 +9,34 @@ from functools import wraps
 def task(func):
     @wraps(func)
     async def wrapper(*args, **kwargs):
-        print(
-            f'    {" ".join((
-                func.__name__,
-                *list(map(str, args[1:])),
-                *([f'{key}: {value}' for key, value in kwargs.items()] if kwargs else [""])
-            ))}',
-            end=" "
-        )
-        data = func(*args, **kwargs).json()
-        while "error" in data:
-            if data["error"]["code"] == 490:
-                return
-            print("    error. sleep for 1 sec")
-            await asyncio.sleep(1)
+        with open(f"logs/{args[1]}.log", "a", encoding="utf-8") as logfile:
+            logfile.write(
+                f'    {" ".join((
+                    func.__name__,
+                    *list(map(str, args[1:])),
+                    *([f'{key}: {value}' for key, value in kwargs.items()] if kwargs else [""])
+                ))}'
+            )
             data = func(*args, **kwargs).json()
-        else:
-            sleep_time = data["data"]["cooldown"]["total_seconds"]
-            print(f"    Success, napping for {sleep_time} seconds")
-            await asyncio.sleep(sleep_time)
+            while "error" in data:
+                err_code = data["error"]["code"]
+                match err_code:
+                    case 490:
+                        f"    {args[1]} already on the spot"
+                        return
+                    case 499:
+                        time_to_sleep = int("".join(ch for ch in data["error"]["message"] if ch.isnumeric()))
+                        logfile.write(f"    {args[1]} in calldown, napping for {time_to_sleep} seconds")
+                        await asyncio.sleep(time_to_sleep)
+                    case _:
+                        logfile.write(str(data) + '\n')
+                        return
+                data = func(*args, **kwargs).json()
+            else:
+                sleep_time = data["data"]["cooldown"]["total_seconds"]
+                logfile.write(f"    Success, {args[1]} is napping for {sleep_time} seconds\n")
+                await asyncio.sleep(sleep_time)
+        return data
 
     return wrapper
 
@@ -45,3 +57,21 @@ class Locations(Enum):
     COOKING_BENCH = (1, 1)
     CHICKEN_SLAUGHTER_SPOT = (0, 1)
     JEWELERY_CRAFT_BENCH = (1, 3)
+    COW_SLAUGHTER_SPOT = (0, 2)
+    MUSHMUSH_SLAUGHTER_SPOT = (5, 3)
+    BANK = (4, 1)
+
+
+def clear_logs():
+    logs_dir = "./logs"
+    if os.path.exists(logs_dir):
+        for filename in os.listdir(logs_dir):
+            file_path = os.path.join(logs_dir, filename)
+            try:
+                os.unlink(file_path)
+            except Exception as e:
+                print(f'Could not remove {file_path}. Error: {e}')
+                sys.exit()
+    else:
+        print(f'Directory {logs_dir} does not exist')
+        sys.exit()
