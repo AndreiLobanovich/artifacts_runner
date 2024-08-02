@@ -12,7 +12,7 @@ class Task(ABC):
     def _get_collected_amount(self, client: ArtifactsAPI, character_name, item=None):
         try:
             items = client.get_char_inventory(character_name)
-            collected = next(filter(lambda i: i["code"] == self.item if not item else item, items))["quantity"]
+            collected = next(filter(lambda i: i["code"] == (self.item if not item else item), items))["quantity"]
         except:
             collected = 0
         return collected
@@ -80,6 +80,5 @@ class DepositTask(Task):
             amount = self._get_collected_amount(client, character_name, item=item)
             if not amount:
                 continue
-            print(await client.deposit_item_in_bank(character_name, item, amount))
             with open(f"logs/{character_name}.log", "a", encoding="utf-8") as logfile:
                 logfile.write(f"    Deposited {amount} {item}")

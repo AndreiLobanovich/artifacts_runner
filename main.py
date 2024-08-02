@@ -50,7 +50,7 @@ async def main():
         ),
         execute_tasks(
             char_names[3],
-            FightTask(50, Locations.CHICKEN_SLAUGHTER_SPOT),
+            FightTask(10, Locations.CHICKEN_SLAUGHTER_SPOT),
             DepositTask("feather", "raw_chicken", "egg")
         ),
         execute_tasks(
