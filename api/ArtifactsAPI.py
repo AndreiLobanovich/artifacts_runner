@@ -3,11 +3,13 @@ import os
 
 import requests
 from dotenv import load_dotenv
+from singleton.singleton import Singleton
 
 from api.urls import *
 from utils import Slots, task
 
 
+@Singleton
 class ArtifactsAPI:
     ROOT_URL = "https://api.artifactsmmo.com"
 
@@ -72,11 +74,27 @@ class ArtifactsAPI:
         }
         return self._post(UNEQUIP.replace("{name}", name), data=data)
 
+    @task
+    def equip(self, name, item, slot=Slots.WEAPON):
+        data = {
+            "code": item,
+            "slot": slot.value
+        }
+        return self._post(EQUIP.replace("{name}", name), data=data)
+
+    def get_all_characters_data(self):
+        return self._get(ALL_CHARACTERS_DATA).json()["data"]
+
+    def get_characters_data(self, name):
+        data = self._get(ALL_CHARACTERS_DATA).json()["data"]
+        char = next(filter(lambda c: c["name"] == name, data))
+        return char
+
     def get_char_inventory(self, name):
-        data = self._get(CHARACTER_INFO).json()["data"]
+        data = self._get(ALL_CHARACTERS_DATA).json()["data"]
         char = next(filter(lambda c: c["name"] == name, data))
         return char["inventory"]
 
     def get_item(self, item_code):
-        data = self._get(CHARACTER_INFO.replace("{code}", item_code)).json()["data"]["item"]
+        data = self._get(ALL_CHARACTERS_DATA.replace("{code}", item_code)).json()["data"]["item"]
         return data

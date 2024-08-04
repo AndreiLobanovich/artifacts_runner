@@ -1,6 +1,5 @@
 import asyncio
 import os
-import shutil
 import sys
 from enum import Enum
 from functools import wraps
@@ -43,22 +42,44 @@ def task(func):
 
 class Slots(Enum):
     WEAPON = "weapon"
+    RING_1 = "ring1"
+    RING_2 = "ring2"
 
 
 class Locations(Enum):
     GEAR_CRAFT_BENCH = (3, 1)
-    COPPER_MINE = (2, 0)
-    SMELTER = (1, 5)
     WEAPON_CRAFT_BENCH = (2, 1)
-    IRON_MINE = (1, 7)
-    ASHWOOD_MINE = (-1, 0)
     WOODCUTTING_BENCH = (-2, -3)
-    GRUDGEON_FISHING_SPOT = (4, 2)
+    SMELTER_BENCH = (1, 5)
     COOKING_BENCH = (1, 1)
-    CHICKEN_SLAUGHTER_SPOT = (0, 1)
     JEWELERY_CRAFT_BENCH = (1, 3)
+
+    COPPER_MINE = (2, 0)
+    IRON_MINE = (1, 7)
+    ASHWOOD_MINE = (6, 1)
+    SPRUCE_MINE = (-2, 5)
+    GOLD_MINE = (10, -4)
+    DEADTREE_MINE = (9, 8)
+    BIRCHTREE_MINE = (3, 5)
+    COAL_MINE = (1, 6)
+
+    GUDGEON_FISHING_SPOT = (4, 2)
+    SHRIMP_FISHING_SPOT = (5, 2)
+    TROUT_FISHING_SPOT = (-2, 6)
+    BASS_FISHING_SPOT = (-3, 6)
+
+    CHICKEN_SLAUGHTER_SPOT = (0, 1)
     COW_SLAUGHTER_SPOT = (0, 2)
     MUSHMUSH_SLAUGHTER_SPOT = (5, 3)
+    FLYING_SERPENT_SLAUGHTER_SPOT = (5, 4)
+    GREEN_SLIME_SLAUGHTER_SPOT = (0, -1)
+    RED_SLIME_SLAUGHTER_SPOT = (1, -1)
+    YELLOW_SLIME_SLAUGHTER_SPOT = (1, -2)
+    BLUE_SLIME_SLAUGHTER_SPOT = (2, -1)
+    SKELETON_SLAUGHTER_SPOT = (8, 6)
+    WOLF_SLAUGHTER_SPOT = (-2, 1)
+    OGRE_SLAUGHTER_SPOT = (-5, -4)
+
     BANK = (4, 1)
 
 
