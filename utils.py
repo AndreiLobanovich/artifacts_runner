@@ -25,10 +25,10 @@ def task(func):
                         return
                     case 499:
                         time_to_sleep = int("".join(ch for ch in data["error"]["message"] if ch.isnumeric()))
-                        logfile.write(f"    {args[1]} in calldown, napping for {time_to_sleep} seconds")
+                        logfile.write(f"    {args[1]} in calldown, napping for {time_to_sleep} seconds\n")
                         await asyncio.sleep(time_to_sleep)
                     case 478:
-                        logfile.write(f"    {args[1]} !!!! insufficient resources for craft")
+                        logfile.write(f"    {args[1]} !!!! insufficient resources for craft\n")
                         return data
                     case _:
                         logfile.write(str(data) + '\n')
@@ -84,6 +84,16 @@ class Locations(Enum):
     OGRE_SLAUGHTER_SPOT = (-5, -4)
 
     BANK = (4, 1)
+
+
+skill_to_location = {
+    "gearcrafting": Locations.GEAR_CRAFT_BENCH,
+    "weaponcrafting": Locations.WEAPON_CRAFT_BENCH,
+    "mining": Locations.SMELTER_BENCH,
+    "woodcutting": Locations.WOODCUTTING_BENCH,
+    "cooking": Locations.COOKING_BENCH,
+    "jewelrycrafting": Locations.JEWELERY_CRAFT_BENCH
+}
 
 
 def clear_logs():

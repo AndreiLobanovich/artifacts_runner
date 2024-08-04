@@ -1,12 +1,13 @@
 import json
 import os
+from dataclasses import dataclass
 
 import requests
 from dotenv import load_dotenv
 from singleton.singleton import Singleton
 
 from api.urls import *
-from utils import Slots, task
+from utils import Slots, task, Locations
 
 
 @Singleton
@@ -90,6 +91,10 @@ class ArtifactsAPI:
         }
         return self._post(BANK_WITHDRAW.replace("{name}", name), data=data)
 
+    def get_map_cell(self, location: Locations | tuple):
+        x, y = location.value
+        return self._get(MAP_TILE.replace("{x}", str(x)).replace("{y}", str(y))).json()
+
     def get_bank_items(self):
         return self._get(BANK_ITEMS).json()["data"]
 
@@ -111,7 +116,62 @@ class ArtifactsAPI:
         return data
 
     def get_item_recipie(self, item_code):
-        return self.get_item(item_code)["craft"]["items"]
+        try:
+            return self.get_item(item_code)["craft"]["items"]
+        except KeyError:
+            return None
+        except TypeError:
+            return None
+
+    def get_item_location(self):
+        tiles = []
+        monsters = []
+        resources = []
+        n = 1
+        end = 2
+        while n < end:
+            response = self._get(MAPS+f"?size=100&page={n}").json()
+            tiles.extend(response["data"])
+            end = response["pages"]
+            n += 1
+        occupied_tiles = [tile for tile in tiles if tile["content"]]
+        n = 1
+        end = 2
+        while n < end:
+            response = self._get(MONSTERS+f"?size=100&page={n}").json()
+            monsters.extend(response["data"])
+            end = response["pages"]
+            n += 1
+        monster_drops = {monster["code"]: monster["drops"] for monster in monsters}
+        n = 1
+        end = 2
+        while n < end:
+            response = self._get(RESOURCES+f"?size=100&page={n}").json()
+            resources.extend(response["data"])
+            end = response["pages"]
+            n += 1
+
+        def get_location(item_code):
+            @dataclass
+            class MakeshiftLocation:
+                name: str
+                value: tuple[int, int]
+            # check if it's a monster tile
+            try:
+                monster = next(filter(lambda m: item_code in str(monster_drops[m]), monster_drops))
+                tile = next(filter(lambda t: monster in str(t), occupied_tiles))
+                return MakeshiftLocation(tile["name"].capitalize(), (tile["x"], tile["y"]))
+            except StopIteration:
+                # check if it's a resource tile
+                try:
+                    resource = next(filter(lambda r: item_code in str(r), resources))["code"]
+                    tile = next(filter(lambda t: resource in str(t), occupied_tiles))
+                    return MakeshiftLocation(tile["name"].capitalize(), (tile["x"], tile["y"]))
+                except StopIteration:
+                    # TODO add craftable item location
+                    return None
+
+        return get_location
 
     def server_is_up(self):
         try:
