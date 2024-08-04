@@ -32,12 +32,12 @@ class ArtifactsAPI:
         return requests.get(self.ROOT_URL + url, headers=self.headers)
 
     @task
-    def move(self, name, x, y, url=MOVE):
+    def move(self, name, x, y):
         data = {
             "x": x,
             "y": y
         }
-        return self._post(url.replace("{name}", name), data)
+        return self._post(MOVE.replace("{name}", name), data)
 
     @task
     def deposit_item_in_bank(self, name, item_code, qtt):
@@ -82,6 +82,17 @@ class ArtifactsAPI:
         }
         return self._post(EQUIP.replace("{name}", name), data=data)
 
+    @task
+    def retrieve_item_from_bank(self, name, item, quantity):
+        data = {
+            "code": item,
+            "quantity": quantity
+        }
+        return self._post(BANK_WITHDRAW.replace("{name}", name), data=data)
+
+    def get_bank_items(self):
+        return self._get(BANK_ITEMS).json()["data"]
+
     def get_all_characters_data(self):
         return self._get(ALL_CHARACTERS_DATA).json()["data"]
 
@@ -96,5 +107,14 @@ class ArtifactsAPI:
         return char["inventory"]
 
     def get_item(self, item_code):
-        data = self._get(ALL_CHARACTERS_DATA.replace("{code}", item_code)).json()["data"]["item"]
+        data = self._get(ITEM_INFO.replace("{code}", item_code)).json()["data"]["item"]
         return data
+
+    def get_item_recipie(self, item_code):
+        return self.get_item(item_code)["craft"]["items"]
+
+    def server_is_up(self):
+        try:
+            return self._get("/").json()["data"]["status"] == "online"
+        except:
+            return False

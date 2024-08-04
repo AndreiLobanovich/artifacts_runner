@@ -27,6 +27,9 @@ def task(func):
                         time_to_sleep = int("".join(ch for ch in data["error"]["message"] if ch.isnumeric()))
                         logfile.write(f"    {args[1]} in calldown, napping for {time_to_sleep} seconds")
                         await asyncio.sleep(time_to_sleep)
+                    case 478:
+                        logfile.write(f"    {args[1]} !!!! insufficient resources for craft")
+                        return data
                     case _:
                         logfile.write(str(data) + '\n')
                         return

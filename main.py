@@ -2,7 +2,7 @@ import asyncio
 import math
 
 from api.ArtifactsAPI import ArtifactsAPI
-from character.Tasks import Task, GatherTask, ProcessingTask, FightTask, DepositTask, TMPCharacter
+from character.Tasks import Task, GatherTask, CraftingTask, FightTask, DepositTask, TMPCharacter
 from utils import Locations, clear_logs
 
 a: ArtifactsAPI = ArtifactsAPI.instance()
@@ -25,28 +25,76 @@ async def execute_tasks(*tasks: *list[Task], cycles=math.inf):
 
 
 async def main():
-    clear_logs()
     await asyncio.gather(
         execute_tasks(
-            GatherTask(characters[0], 116, Locations.IRON_MINE, "iron_ore"),
-            ProcessingTask(characters[0], 17, Locations.SMELTER_BENCH, "iron"),
-            ProcessingTask(characters[0], 2, Locations.WEAPON_CRAFT_BENCH, "iron_sword"),
-            DepositTask(characters[0], "iron_sword", "iron", "iron_ore")
-
+            CraftingTask(
+                characters[0],
+                20,
+                Locations.WEAPON_CRAFT_BENCH,
+                "iron_sword",
+                [
+                    CraftingTask(
+                        characters[0],
+                        16,
+                        Locations.SMELTER_BENCH,
+                        "iron",
+                        [GatherTask(characters[0], 116, Locations.IRON_MINE, "iron_ore")]
+                    )
+                ]
+            ),
+            DepositTask(characters[0], "iron", "iron_sword")
         ),
         execute_tasks(
-            GatherTask(characters[1], 36, Locations.SPRUCE_MINE, "spruce_wood"),
-            GatherTask(characters[1], 4, Locations.RED_SLIME_SLAUGHTER_SPOT, "red_slimeball", pillage=True),
-            GatherTask(characters[1], 4, Locations.GREEN_SLIME_SLAUGHTER_SPOT, "green_slimeball", pillage=True),
-            GatherTask(characters[1], 4, Locations.YELLOW_SLIME_SLAUGHTER_SPOT, "yellow_slimeball", pillage=True),
-            GatherTask(characters[1], 4, Locations.BLUE_SLIME_SLAUGHTER_SPOT, "blue_slimeball", pillage=True),
-            ProcessingTask(characters[1], 6, Locations.WOODCUTTING_BENCH, "spruce_plank"),
-            ProcessingTask(characters[1], 1, Locations.GEAR_CRAFT_BENCH, "slime_shield"),
+            CraftingTask(
+                characters[1],
+                1,
+                Locations.GEAR_CRAFT_BENCH,
+                "slime_shield",
+                [
+                    GatherTask(
+                        characters[1],
+                        4,
+                        Locations.RED_SLIME_SLAUGHTER_SPOT,
+                        "red_slimeball",
+                        pillage=True
+                    ),
+                    GatherTask(
+                        characters[1],
+                        4,
+                        Locations.GREEN_SLIME_SLAUGHTER_SPOT,
+                        "green_slimeball",
+                        pillage=True
+                    ),
+                    GatherTask(
+                        characters[1],
+                        4,
+                        Locations.YELLOW_SLIME_SLAUGHTER_SPOT,
+                        "yellow_slimeball",
+                        pillage=True
+                    ),
+                    GatherTask(
+                        characters[1],
+                        4,
+                        Locations.BLUE_SLIME_SLAUGHTER_SPOT,
+                        "blue_slimeball",
+                        pillage=True
+                    ),
+                    CraftingTask(
+                        characters[1],
+                        6,
+                        Locations.WOODCUTTING_BENCH,
+                        "spruce_plank",
+                        [
+                            GatherTask(characters[1], 36, Locations.SPRUCE_MINE, "spruce_wood"),
+                        ]
+                    ),
+                ]
+            ),
             DepositTask(characters[1], "slime_shield", "spruce_plank")
         ),
         execute_tasks(
-            GatherTask(characters[2], 50, Locations.TROUT_FISHING_SPOT, "trout"),
-            ProcessingTask(characters[2], 50, Locations.COOKING_BENCH, "cooked_trout"),
+            CraftingTask(characters[2], 50, Locations.COOKING_BENCH, "cooked_trout",
+                         [GatherTask(characters[2], 50, Locations.TROUT_FISHING_SPOT, "trout")]),
             DepositTask(characters[2], "fried_eggs", "egg", "feather", "golden_egg", "raw_chicken", "cooked_trout",
                         "trout")
 
@@ -63,13 +111,38 @@ async def main():
             DepositTask(characters[3], "raw_wolf_meat", "wolf_bone", "wolf_hair")
         ),
         execute_tasks(
-            GatherTask(characters[4], 72, Locations.IRON_MINE, "iron_ore"),
-            ProcessingTask(characters[4], 12, Locations.SMELTER_BENCH, "iron"),
-            ProcessingTask(characters[4], 2, Locations.JEWELERY_CRAFT_BENCH, "iron_ring"),
+            CraftingTask(
+                characters[4],
+                2,
+                Locations.JEWELERY_CRAFT_BENCH,
+                "iron_ring",
+                [
+                    CraftingTask(
+                        characters[4],
+                        12,
+                        Locations.SMELTER_BENCH,
+                        "iron",
+                        [GatherTask(characters[4], 72, Locations.IRON_MINE, "iron_ore")]
+                    )
+                ]
+            ),
             DepositTask(characters[4], "iron_ring", "iron", "iron_ore")
         ),
     )
 
 
+async def retry_main():
+    while True:
+        if a.server_is_up():
+            try:
+                await main()
+            except Exception as e:
+                print(f"Error occurred: {e}. Retrying in 10 seconds...")
+                await asyncio.sleep(10)
+        else:
+            print("Server is down. Waiting for it to come back up...")
+            await asyncio.sleep(10)
+
+
 if __name__ == "__main__":
-    asyncio.run(main())
+    asyncio.run(retry_main())
