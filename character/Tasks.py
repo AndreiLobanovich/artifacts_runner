@@ -36,7 +36,7 @@ class Task(ABC):
     async def __call__(self):
         with open(f"logs/{self.character.name}.log", "a", encoding="utf-8") as logfile:
             logfile.write(
-                f'{self.character.name} starts {self.__class__.__name__} | location: {self.location} | item: {self.item}\n')
+                f'{self.character.name} starts {self.__class__.__name__} | location: {self.location.name} | item: {self.item}\n')
 
         await self.client.move(self.character.name, *self.location.value)
 
@@ -61,10 +61,12 @@ class Task(ABC):
 class GatherTask(Task):
     def __init__(self, character: TMPCharacter, quantity, item):
         super().__init__(character, quantity, item=item)
+        self.collected = self._get_collected_amount(item=self.item)
+        self.quantity = self.collected + quantity
 
     async def __call__(self):
         await super().__call__()
-        while (collected := self._get_collected_amount(item=self.item)) < self.quantity:
+        while self.collected < self.quantity:
             if (pillage := self.client.get_map_cell(self.location)["data"]["content"]["type"]) == "monster":
                 if self.character.weapon:
                     await self.switch_item(slot=Slots.WEAPON, item=self.character.weapon)
@@ -74,7 +76,8 @@ class GatherTask(Task):
                     await self.switch_item(slot=Slots.WEAPON, item=self.character.tool)
                 await self.client.gather_resource(self.character.name)
             with open(f"logs/{self.character.name}.log", "a", encoding="utf-8") as logfile:
-                logfile.write(f'    {"Pillaged" if pillage else "Gathered"} {collected}/{self.quantity}\n')
+                logfile.write(f'    {"Pillaged" if pillage else "Gathered"} {self.collected}/{self.quantity}\n')
+            self.collected = self._get_collected_amount(item=self.item)
 
 
 class CraftingTask(Task):
@@ -103,7 +106,10 @@ class CraftingTask(Task):
                 if left_in_bank >= required:
                     items_to_get_from_bank.update({item: required})
                 else:
-                    items_to_get_otherwise.update({item: required})
+                    if left_in_bank:
+                        items_to_get_from_bank.update({item: left_in_bank})
+                    if required - left_in_bank > 0:
+                        items_to_get_otherwise.update({item: required - left_in_bank})
         if items_to_get_from_bank:
             await RetrieveFromBankTask(self.character, **items_to_get_from_bank)()
         preceding_tasks = []
