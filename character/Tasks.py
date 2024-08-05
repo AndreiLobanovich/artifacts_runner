@@ -42,9 +42,9 @@ class Task(ABC):
 
     async def __call__(self):
         ensure_logs_directory_exists()
-        log_file = f"logs/{self.character.name}.log"
+        log_file_name = f"logs/{self.character.name}.log"
         try:
-            with open(log_file, "a", encoding="utf-8") as logfile:
+            with open(log_file_name, "a", encoding="utf-8") as logfile:
                 logfile.write(
                     f'{self.character.name} starts {self.__class__.__name__} | location: {self.location.name if self.location else "N/A"} | item: {self.item}\n')
 
@@ -109,8 +109,6 @@ class CraftingTask(Task):
         self.location = location
 
     async def __call__(self):
-        ensure_logs_directory_exists()
-        log_file = f"logs/{self.character.name}.log"
         try:
             recipe = {craft_item["code"]: craft_item["quantity"] for craft_item in self.client.get_item_recipie(self.item)}
             items_to_get_from_bank = dict()
@@ -143,7 +141,7 @@ class CraftingTask(Task):
                 await preceding_task()
             await super().__call__()
             await self.client.craft(self.character.name, qtt=self.quantity, code=self.item)
-            with open(log_file, "a", encoding="utf-8") as logfile:
+            with open(f"logs/{self.character.name}.log", "a", encoding="utf-8") as logfile:
                 logfile.write(f"    Crafted {self.quantity} {self.item}\n")
         except Exception as e:
             print(f"Error in CraftingTask: {e}")
@@ -157,11 +155,10 @@ class FightTask(Task):
         super().__init__(character, quantity)
 
     async def __call__(self):
-        ensure_logs_directory_exists()
-        log_file = f"logs/{self.character.name}.log"
         try:
             await super().__call__()
-            with open(log_file, "a", encoding="utf-8") as logfile:
+            log_file_name = f"logs/{self.character.name}.log"
+            with open(log_file_name, "a", encoding="utf-8") as logfile:
                 for i in range(self.quantity):
                     await self.client.fight(self.character.name)
                     self.progress += 1
@@ -178,11 +175,10 @@ class DepositTask(Task):
         self.location = Locations.BANK
 
     async def __call__(self):
-        ensure_logs_directory_exists()
-        log_file = f"logs/{self.character.name}.log"
         try:
             await super().__call__()
-            with open(log_file, "a", encoding="utf-8") as logfile:
+            log_file_name = f"logs/{self.character.name}.log"
+            with open(log_file_name, "a", encoding="utf-8") as logfile:
                 for item in self.items:
                     amount = self._get_collected_amount(item=item)
                     if not amount:
@@ -200,11 +196,10 @@ class RetrieveFromBankTask(Task):
         self.items = items
 
     async def __call__(self):
-        ensure_logs_directory_exists()
-        log_file = f"logs/{self.character.name}.log"
         try:
             await super().__call__()
-            with open(log_file, "a", encoding="utf-8") as logfile:
+            log_file_name = f"logs/{self.character.name}.log"
+            with open(log_file_name, "a", encoding="utf-8") as logfile:
                 for item in self.items:
                     await self.client.retrieve_item_from_bank(self.character.name, item, self.items[item])
                     logfile.write(f"    Retrieved {item} {self.items[item]}\n")
