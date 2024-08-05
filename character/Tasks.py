@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from abc import ABC
 from dataclasses import dataclass
+import os
 
 from api.ArtifactsAPI import ArtifactsAPI
 from utils import Locations, Slots, skill_to_location
@@ -16,6 +17,12 @@ class TMPCharacter:
 
 client = ArtifactsAPI.instance()
 get_resource_location = client.get_item_location()
+
+
+def ensure_logs_directory_exists():
+    logs_dir = "./logs"
+    if not os.path.exists(logs_dir):
+        os.makedirs(logs_dir)
 
 
 class Task(ABC):
@@ -34,11 +41,16 @@ class Task(ABC):
         print(f'[{self.character.name}] | {self.__class__.__name__} | {self.item} | {self.quantity} created')
 
     async def __call__(self):
-        with open(f"logs/{self.character.name}.log", "a", encoding="utf-8") as logfile:
-            logfile.write(
-                f'{self.character.name} starts {self.__class__.__name__} | location: {self.location.name} | item: {self.item}\n')
+        ensure_logs_directory_exists()
+        log_file = f"logs/{self.character.name}.log"
+        try:
+            with open(log_file, "a", encoding="utf-8") as logfile:
+                logfile.write(
+                    f'{self.character.name} starts {self.__class__.__name__} | location: {self.location.name if self.location else "N/A"} | item: {self.item}\n')
 
-        await self.client.move(self.character.name, *self.location.value)
+            await self.client.move(self.character.name, *self.location.value)
+        except Exception as e:
+            print(f"Error in {self.__class__.__name__} task: {e}")
 
     def __del__(self):
         print(f'[{self.character.name}] | {self.__class__.__name__} | {self.item} | {self.quantity} finished')
@@ -67,17 +79,22 @@ class GatherTask(Task):
     async def __call__(self):
         await super().__call__()
         while self.collected < self.quantity:
-            if (pillage := self.client.get_map_cell(self.location)["data"]["content"]["type"]) == "monster":
-                if self.character.weapon:
-                    await self.switch_item(slot=Slots.WEAPON, item=self.character.weapon)
-                await self.client.fight(self.character.name)
-            else:
-                if self.character.tool:
-                    await self.switch_item(slot=Slots.WEAPON, item=self.character.tool)
-                await self.client.gather_resource(self.character.name)
-            with open(f"logs/{self.character.name}.log", "a", encoding="utf-8") as logfile:
-                logfile.write(f'    {"Pillaged" if pillage else "Gathered"} {self.collected}/{self.quantity}\n')
-            self.collected = self._get_collected_amount(item=self.item)
+            try:
+                pillage = self.client.get_map_cell(self.location)["data"]["content"]["type"]
+                if pillage == "monster":
+                    if self.character.weapon:
+                        await self.switch_item(slot=Slots.WEAPON, item=self.character.weapon)
+                    await self.client.fight(self.character.name)
+                else:
+                    if self.character.tool:
+                        await self.switch_item(slot=Slots.WEAPON, item=self.character.tool)
+                    await self.client.gather_resource(self.character.name)
+                with open(f"logs/{self.character.name}.log", "a", encoding="utf-8") as logfile:
+                    logfile.write(f'    {"Pillaged" if pillage == "monster" else "Gathered"} {self.collected}/{self.quantity}\n')
+                self.collected = self._get_collected_amount(item=self.item)
+            except Exception as e:
+                print(f"Error in GatherTask: {e}")
+                break
 
 
 class CraftingTask(Task):
@@ -92,41 +109,44 @@ class CraftingTask(Task):
         self.location = location
 
     async def __call__(self):
-        # prep for crafting
-        recipie = {craft_item["code"]: craft_item["quantity"] for craft_item in self.client.get_item_recipie(self.item)}
-        items_to_get_from_bank = dict()
-        items_to_get_otherwise = dict()
-        for item in recipie:
-            if (collected := self._get_collected_amount(item=item)) < (recipie[item] * self.quantity):
-                required = recipie[item] * self.quantity - collected
-                try:
-                    left_in_bank = {item["code"]: item["quantity"] for item in self.client.get_bank_items()}[item]
-                except KeyError:
-                    left_in_bank = 0
-                if left_in_bank >= required:
-                    items_to_get_from_bank.update({item: required})
+        ensure_logs_directory_exists()
+        log_file = f"logs/{self.character.name}.log"
+        try:
+            recipe = {craft_item["code"]: craft_item["quantity"] for craft_item in self.client.get_item_recipie(self.item)}
+            items_to_get_from_bank = dict()
+            items_to_get_otherwise = dict()
+            for item in recipe:
+                if (collected := self._get_collected_amount(item=item)) < (recipe[item] * self.quantity):
+                    required = recipe[item] * self.quantity - collected
+                    try:
+                        left_in_bank = {item["code"]: item["quantity"] for item in self.client.get_bank_items()}[item]
+                    except KeyError:
+                        left_in_bank = 0
+                    if left_in_bank >= required:
+                        items_to_get_from_bank.update({item: required})
+                    else:
+                        if left_in_bank:
+                            items_to_get_from_bank.update({item: left_in_bank})
+                        if required - left_in_bank > 0:
+                            items_to_get_otherwise.update({item: required - left_in_bank})
+            if items_to_get_from_bank:
+                await RetrieveFromBankTask(self.character, **items_to_get_from_bank)()
+            preceding_tasks = []
+            for item in items_to_get_otherwise:
+                if not client.get_item_recipie(item):
+                    preceding_tasks.append(GatherTask(self.character, items_to_get_otherwise[item], item))
                 else:
-                    if left_in_bank:
-                        items_to_get_from_bank.update({item: left_in_bank})
-                    if required - left_in_bank > 0:
-                        items_to_get_otherwise.update({item: required - left_in_bank})
-        if items_to_get_from_bank:
-            await RetrieveFromBankTask(self.character, **items_to_get_from_bank)()
-        preceding_tasks = []
-        for item in items_to_get_otherwise:
-            if not client.get_item_recipie(item):
-                preceding_tasks.append(GatherTask(self.character, items_to_get_otherwise[item], item))
-            else:
-                item_subtype = client.get_item(item)["craft"]["skill"]
-                location = skill_to_location[item_subtype]
-                preceding_tasks.append(CraftingTask(self.character, items_to_get_otherwise[item], location, item))
-        for preceding_task in preceding_tasks:
-            await preceding_task()
-        # crafting itself
-        await super().__call__()
-        await self.client.craft(self.character.name, qtt=self.quantity, code=self.item)
-        with open(f"logs/{self.character.name}.log", "a", encoding="utf-8") as logfile:
-            logfile.write(f"    Crafted {self.quantity} {self.item}\n")
+                    item_subtype = client.get_item(item)["craft"]["skill"]
+                    location = skill_to_location[item_subtype]
+                    preceding_tasks.append(CraftingTask(self.character, items_to_get_otherwise[item], location, item))
+            for preceding_task in preceding_tasks:
+                await preceding_task()
+            await super().__call__()
+            await self.client.craft(self.character.name, qtt=self.quantity, code=self.item)
+            with open(log_file, "a", encoding="utf-8") as logfile:
+                logfile.write(f"    Crafted {self.quantity} {self.item}\n")
+        except Exception as e:
+            print(f"Error in CraftingTask: {e}")
 
 
 class FightTask(Task):
@@ -137,13 +157,18 @@ class FightTask(Task):
         super().__init__(character, quantity)
 
     async def __call__(self):
-        await super().__call__()
-        with open(f"logs/{self.character.name}.log", "a", encoding="utf-8") as logfile:
-            for i in range(self.quantity):
-                await self.client.fight(self.character.name)
-                self.progress += 1
-                logfile.write(f'    Killed {self.progress}/{self.quantity}')
-        self.progress = 0
+        ensure_logs_directory_exists()
+        log_file = f"logs/{self.character.name}.log"
+        try:
+            await super().__call__()
+            with open(log_file, "a", encoding="utf-8") as logfile:
+                for i in range(self.quantity):
+                    await self.client.fight(self.character.name)
+                    self.progress += 1
+                    logfile.write(f'    Killed {self.progress}/{self.quantity}\n')
+            self.progress = 0
+        except Exception as e:
+            print(f"Error in FightTask: {e}")
 
 
 class DepositTask(Task):
@@ -153,14 +178,19 @@ class DepositTask(Task):
         self.location = Locations.BANK
 
     async def __call__(self):
-        await super().__call__()
-        with open(f"logs/{self.character.name}.log", "a", encoding="utf-8") as logfile:
-            for item in self.items:
-                amount = self._get_collected_amount(item=item)
-                if not amount:
-                    continue
-                await self.client.deposit_item_in_bank(self.character.name, item, amount)
-                logfile.write(f"    Deposited {amount} {item}\n")
+        ensure_logs_directory_exists()
+        log_file = f"logs/{self.character.name}.log"
+        try:
+            await super().__call__()
+            with open(log_file, "a", encoding="utf-8") as logfile:
+                for item in self.items:
+                    amount = self._get_collected_amount(item=item)
+                    if not amount:
+                        continue
+                    await self.client.deposit_item_in_bank(self.character.name, item, amount)
+                    logfile.write(f"    Deposited {amount} {item}\n")
+        except Exception as e:
+            print(f"Error in DepositTask: {e}")
 
 
 class RetrieveFromBankTask(Task):
@@ -170,8 +200,13 @@ class RetrieveFromBankTask(Task):
         self.items = items
 
     async def __call__(self):
-        await super().__call__()
-        with open(f"logs/{self.character.name}.log", "a", encoding="utf-8") as logfile:
-            for item in self.items:
-                await self.client.retrieve_item_from_bank(self.character.name, item, self.items[item])
-                logfile.write(f"    Deposited {item} {self.items[item]}\n")
+        ensure_logs_directory_exists()
+        log_file = f"logs/{self.character.name}.log"
+        try:
+            await super().__call__()
+            with open(log_file, "a", encoding="utf-8") as logfile:
+                for item in self.items:
+                    await self.client.retrieve_item_from_bank(self.character.name, item, self.items[item])
+                    logfile.write(f"    Retrieved {item} {self.items[item]}\n")
+        except Exception as e:
+            print(f"Error in RetrieveFromBankTask: {e}")
