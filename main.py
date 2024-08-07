@@ -1,5 +1,6 @@
 import asyncio
 import math
+from datetime import datetime
 
 from api.ArtifactsAPI import ArtifactsAPI
 from character.Tasks import Task, CraftingTask, FightTask, DepositTask, TMPCharacter
@@ -15,14 +16,16 @@ characters = [
     TMPCharacter("Habib", weapon="iron_sword", tool="iron_pickaxe")
 ]
 
-
 async def execute_tasks(*tasks: *list[Task], cycles=math.inf):
     i = 0
     while i < cycles:
         for task in tasks:
             await task()
+            # Log completion time
+            log_file_name = f"logs/{task.character.name}.log"
+            with open(log_file_name, "a", encoding="utf-8") as logfile:
+                logfile.write(f"Task {task.__class__.__name__} completed at {datetime.now()}\n")
         i += 1
-
 
 async def main():
     await asyncio.gather(
@@ -85,7 +88,6 @@ async def main():
         ),
     )
 
-
 async def retry_main():
     while True:
         if a.server_is_up():
@@ -98,7 +100,6 @@ async def retry_main():
         else:
             print("Server is down. Waiting for it to come back up...")
             await asyncio.sleep(10)
-
 
 if __name__ == "__main__":
     asyncio.run(retry_main())
