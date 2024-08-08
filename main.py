@@ -2,18 +2,11 @@ import asyncio
 import math
 
 from api.ArtifactsAPI import ArtifactsAPI
-from character.Tasks import Task, CraftingTask, FightTask, DepositTask, TMPCharacter
-from utils import Locations
+from character.Tasks import Task, CraftingTask, DepositTask, FightTask, GatherTask
+from characters import characters
+from utils import clear_logs
 
 a: ArtifactsAPI = ArtifactsAPI.instance()
-
-characters = [
-    TMPCharacter("Samriel", weapon="multislimes_sword", tool="iron_pickaxe"),
-    TMPCharacter("Samriella", weapon="iron_sword", tool="iron_axe"),
-    TMPCharacter("Miriel", weapon="water_bow", tool="spruce_fishing_rod"),
-    TMPCharacter("Mitsu", weapon="", tool=""),
-    TMPCharacter("Habib", weapon="iron_sword", tool="iron_pickaxe")
-]
 
 
 async def execute_tasks(*tasks: *list[Task], cycles=math.inf):
@@ -27,73 +20,29 @@ async def execute_tasks(*tasks: *list[Task], cycles=math.inf):
 async def main():
     await asyncio.gather(
         execute_tasks(
-            CraftingTask(
-                characters[0],
-                2,
-                Locations.WEAPON_CRAFT_BENCH,
-                "iron_sword",
-            ),
-            DepositTask(characters[0], "iron", "iron_sword")
+            FightTask(characters[0], 20, "pig"),
+            DepositTask(characters[0]),
+            FightTask(characters[0], 20, "skeleton"),
+            DepositTask(characters[0])
         ),
         execute_tasks(
-            CraftingTask(
-                characters[1],
-                1,
-                Locations.GEAR_CRAFT_BENCH,
-                "slime_shield",
-            ),
-            DepositTask(characters[1], "slime_shield")
-        ),
-        execute_tasks(
-            CraftingTask(
-                characters[2],
-                50,
-                Locations.COOKING_BENCH,
-                "cooked_trout",
-            ),
-            DepositTask(
-                characters[2],
-                "fried_eggs",
-                "egg",
-                "feather",
-                "golden_egg",
-                "raw_chicken",
-                "cooked_trout",
-                "trout"
-            )
-
-            # GatherTask(characters[2], 50, Locations.BASS_FISHING_SPOT, "bass"),
-            # ProcessingTask(characters[2], 50, Locations.COOKING_BENCH, "cooked_bass"),
-            # DepositTask(characters[2], *"trout cooked_bass shrimp".split())
-
-            # GatherTask(5, Locations.SHRIMP_FISHING_SPOT, "shrimp"),
-            # ProcessingTask(5, Locations.COOKING_BENCH, "cooked_shrimp"),
-            # DepositTask("cooked_shrimp")
-        ),
-        execute_tasks(
-            FightTask(characters[3], 20, Locations.WOLF_SLAUGHTER_SPOT),
-            DepositTask(characters[3], "raw_wolf_meat", "wolf_bone", "wolf_hair")
-        ),
-        execute_tasks(
-            CraftingTask(
-                characters[4],
-                2,
-                Locations.JEWELERY_CRAFT_BENCH,
-                "iron_ring",
-            ),
-            DepositTask(characters[4], "iron_ring", "iron", "iron_ore")
-        ),
+            *[CraftingTask(characters[1], 1, item) for item in
+              "tromatising_mask steel_legs_armor steel_armor steel_boots steel_helm".split()],
+            DepositTask(characters[1])),
+        execute_tasks(CraftingTask(characters[2], 5, "cheese"), DepositTask(characters[2])),
+        execute_tasks(FightTask(characters[3], 20, "flying_serpent"), DepositTask(characters[3])),
+        execute_tasks(FightTask(characters[4], 20, "wolf"), DepositTask(characters[4]))
     )
 
 
 async def retry_main():
+    clear_logs()
     while True:
         if a.server_is_up():
             try:
                 await main()
             except Exception as e:
                 print(f"Error occurred: {e}. Retrying in 10 seconds...")
-                raise e
                 await asyncio.sleep(10)
         else:
             print("Server is down. Waiting for it to come back up...")

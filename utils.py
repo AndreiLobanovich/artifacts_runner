@@ -1,6 +1,7 @@
 import asyncio
 import os
 import sys
+from dataclasses import dataclass
 from enum import Enum
 from functools import wraps
 
@@ -22,7 +23,7 @@ def task(func):
                 match err_code:
                     case 490:
                         f"    {args[1]} already on the spot"
-                        return
+                        return data
                     case 499:
                         time_to_sleep = int("".join(ch for ch in data["error"]["message"] if ch.isnumeric()))
                         logfile.write(f"    {args[1]} in calldown, napping for {time_to_sleep} seconds\n")
@@ -30,9 +31,12 @@ def task(func):
                     case 478:
                         logfile.write(f"    {args[1]} !!!! insufficient resources for craft\n")
                         return data
+                    case 497:
+                        logfile.write(f"    {args[1]} !!!! inventory is full\n")
+                        return data
                     case _:
                         logfile.write(str(data) + '\n')
-                        return
+                        return data
                 data = func(*args, **kwargs).json()
             else:
                 sleep_time = data["data"]["cooldown"]["total_seconds"]
@@ -86,6 +90,8 @@ class Locations(Enum):
     BANK = (4, 1)
 
 
+skill_names = ['mining', 'woodcutting', 'fishing', 'weaponcrafting', 'gearcrafting', 'jewelrycrafting', 'cooking']
+
 skill_to_location = {
     "gearcrafting": Locations.GEAR_CRAFT_BENCH,
     "weaponcrafting": Locations.WEAPON_CRAFT_BENCH,
@@ -109,3 +115,9 @@ def clear_logs():
     else:
         print(f'Directory {logs_dir} does not exist')
         sys.exit()
+
+
+@dataclass
+class MakeshiftLocation:
+    name: str
+    value: tuple[int, int]

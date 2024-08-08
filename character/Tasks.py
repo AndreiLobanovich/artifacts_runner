@@ -1,47 +1,47 @@
 from __future__ import annotations
 
 from abc import ABC
-from dataclasses import dataclass
 
 from api.ArtifactsAPI import ArtifactsAPI
-from utils import Locations, Slots, skill_to_location
-
-
-@dataclass
-class TMPCharacter:
-    name: str
-    weapon: str
-    tool: str
-
-
-client = ArtifactsAPI.instance()
-get_resource_location = client.get_item_location()
+from characters import TMPCharacter
+from utils import Locations, Slots
 
 
 class Task(ABC):
     location: Locations | None
     item: str | None
     quantity: int
-    client: ArtifactsAPI = client
+    monster: dict | None
+    client: ArtifactsAPI = ArtifactsAPI.instance()
     character: TMPCharacter
 
     def __init__(self, character: TMPCharacter, quantity, item=None):
         if item:
-            self.location = get_resource_location(item)
+            self.location = self.client.get_item_location(item)
         self.item = item
         self.quantity = quantity
         self.character: TMPCharacter = character
-        print(f'[{self.character.name}] | {self.__class__.__name__} | {self.item} | {self.quantity} created')
+
+    def __init_subclass__(cls, **kwargs):
+        orig_init = cls.__init__
+
+        def new_init(self, *args, **kwargs):
+            orig_init(self, *args, **kwargs)
+            print(
+                f'[{self.character.name}]'
+                f' {self.__class__.__name__} created'
+                f' "get" {self.quantity} of {self.item}'
+                f' {self.location.name} {self.location.value}'
+            )
+
+        cls.__init__ = new_init
 
     async def __call__(self):
-        with open(f"logs/{self.character.name}.log", "a", encoding="utf-8") as logfile:
-            logfile.write(
-                f'{self.character.name} starts {self.__class__.__name__} | location: {self.location.name} | item: {self.item}\n')
-
         await self.client.move(self.character.name, *self.location.value)
 
     def __del__(self):
-        print(f'[{self.character.name}] | {self.__class__.__name__} | {self.item} | {self.quantity} finished')
+        print(
+            f'[{self.character.name}] | {self.__class__.__name__} | {self.item} | {self.quantity} | {self.location} finished')
 
     def _get_collected_amount(self, item=None):
         try:
@@ -51,7 +51,7 @@ class Task(ABC):
             collected = 0
         return collected
 
-    async def switch_item(self, slot: Slots, item: str):
+    async def _switch_item(self, slot: Slots, item: str):
         already_equipped = self.client.get_characters_data(self.character.name)[slot.value + "_slot"] == item
         if not already_equipped:
             await self.client.unequip(self.character.name, slot=slot)
@@ -63,21 +63,73 @@ class GatherTask(Task):
         super().__init__(character, quantity, item=item)
         self.collected = self._get_collected_amount(item=self.item)
         self.quantity = self.collected + quantity
+        self.monster = None
 
     async def __call__(self):
         await super().__call__()
-        while self.collected < self.quantity:
-            if (pillage := self.client.get_map_cell(self.location)["data"]["content"]["type"]) == "monster":
-                if self.character.weapon:
-                    await self.switch_item(slot=Slots.WEAPON, item=self.character.weapon)
-                await self.client.fight(self.character.name)
-            else:
-                if self.character.tool:
-                    await self.switch_item(slot=Slots.WEAPON, item=self.character.tool)
-                await self.client.gather_resource(self.character.name)
-            with open(f"logs/{self.character.name}.log", "a", encoding="utf-8") as logfile:
+        with open(f"logs/{self.character.name}.log", "a", encoding="utf-8") as logfile:
+            logfile.write(
+                f'{self.character.name} starts {self.__class__.__name__} | location: {self.location.name} | item: {self.item}\n')
+            while self.collected < self.quantity:
+                cell_data = self.client.get_map_cell(self.location)["data"]
+                if pillage := cell_data["content"]["type"] == "monster":
+                    if not self.monster:
+                        self.monster = self.client.get_monster_by_code(cell_data["content"]["code"])
+                    await self.equip_best_weapon()
+                    result = await self.client.fight(self.character.name)
+                    if "497" in str(result):
+                        await DepositTask(self.character)()
+                        await self.client.move(self.character.name, *self.location.value)
+                    try:
+                        if result["data"]["fight"]["result"] == "lose":
+                            # skipping task
+                            return
+                    except Exception as e:
+                        logfile.write(f"!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!{str(result)}")
+
+                else:
+                    if self.character.tools:
+                        subtype = self.client.get_item(self.item)["subtype"]
+                        tool = self.character.tools.get(subtype)
+                        if tool:
+                            await self._switch_item(slot=Slots.WEAPON, item=tool)
+                    await self.client.gather_resource(self.character.name)
                 logfile.write(f'    {"Pillaged" if pillage else "Gathered"} {self.collected}/{self.quantity}\n')
-            self.collected = self._get_collected_amount(item=self.item)
+                self.collected = self._get_collected_amount(item=self.item)
+            self.collected = 0
+
+    async def equip_best_weapon(self):
+        await self._switch_item(Slots.WEAPON, self.choose_best_weapon().get("code"))
+
+    def choose_best_weapon(self):
+        all_weapons = list(filter(lambda i: "weapon" in str(i), self.client.items))
+        weapon_codes_in_inventory = [weapon["code"] for weapon in self.client.get_char_inventory(self.character.name)]
+        weapon_in_inventory = list(filter(lambda w: w["code"] in weapon_codes_in_inventory, all_weapons))
+        try:
+            equipped_weapon = self.client.get_item(self.client.get_characters_data(self.character.name)["weapon_slot"])
+            weapon_in_inventory.append(equipped_weapon)
+        except StopIteration:
+            pass
+
+        best_weapon = None
+        best_effective_damage = 0
+
+        for weapon in weapon_in_inventory:
+            total_damage = 0
+            for effect in weapon['effects']:
+                attack_type = effect['name']
+                attack_value = effect['value']
+                resistance = self.monster.get(attack_type.replace('attack_', 'res_'), 0)
+
+                damage_reduction = attack_value * (resistance * 0.1)
+                effective_damage = attack_value - damage_reduction
+
+                total_damage += max(0, effective_damage)
+
+            if total_damage > best_effective_damage:
+                best_effective_damage = total_damage
+                best_weapon = weapon
+        return best_weapon
 
 
 class CraftingTask(Task):
@@ -85,11 +137,10 @@ class CraftingTask(Task):
             self,
             character: TMPCharacter,
             quantity,
-            location,
             item,
     ):
         super().__init__(character, quantity, item=item)
-        self.location = location
+        self.location = self.client.get_item_location(item)
 
     async def __call__(self):
         # prep for crafting
@@ -114,48 +165,85 @@ class CraftingTask(Task):
             await RetrieveFromBankTask(self.character, **items_to_get_from_bank)()
         preceding_tasks = []
         for item in items_to_get_otherwise:
-            if not client.get_item_recipie(item):
+            if not self.client.get_item_recipie(item):
                 preceding_tasks.append(GatherTask(self.character, items_to_get_otherwise[item], item))
             else:
-                item_subtype = client.get_item(item)["craft"]["skill"]
-                location = skill_to_location[item_subtype]
-                preceding_tasks.append(CraftingTask(self.character, items_to_get_otherwise[item], location, item))
+                preceding_tasks.append(CraftingTask(self.character, items_to_get_otherwise[item], item))
         for preceding_task in preceding_tasks:
             await preceding_task()
         # crafting itself
         await super().__call__()
-        await self.client.craft(self.character.name, qtt=self.quantity, code=self.item)
+        response = await self.client.craft(self.character.name, qtt=self.quantity, code=self.item)
         with open(f"logs/{self.character.name}.log", "a", encoding="utf-8") as logfile:
-            logfile.write(f"    Crafted {self.quantity} {self.item}\n")
+            if "insufficient" in str(response):
+                logfile.write(f"    Craft skipped, insufficient resources\n")
+            else:
+                logfile.write(f"    Crafted {self.quantity} {self.item}\n")
 
 
 class FightTask(Task):
     progress: int = 0
 
-    def __init__(self, character: TMPCharacter, quantity, location):
-        self.location = location
+    def __init__(self, character: TMPCharacter, quantity, monster_code):
         super().__init__(character, quantity)
+        self.monster = self.client.get_monster_by_code(monster_code)
+        self.location = self.client.get_location_by_monster(monster_code)
 
     async def __call__(self):
         await super().__call__()
+        await self.equip_best_weapon()
         with open(f"logs/{self.character.name}.log", "a", encoding="utf-8") as logfile:
             for i in range(self.quantity):
-                await self.client.fight(self.character.name)
+                result = await self.client.fight(self.character.name)
+                if "497" in str(result):
+                    await DepositTask(self.character)()
                 self.progress += 1
                 logfile.write(f'    Killed {self.progress}/{self.quantity}')
         self.progress = 0
 
+    async def equip_best_weapon(self):
+        await self._switch_item(Slots.WEAPON, self.choose_best_weapon().get("code"))
+
+    def choose_best_weapon(self):
+        all_weapons = list(filter(lambda i: "weapon" in str(i), self.client.items))
+        weapon_codes_in_inventory = [weapon["code"] for weapon in self.client.get_char_inventory(self.character.name)]
+        weapon_in_inventory = list(filter(lambda w: w["code"] in weapon_codes_in_inventory, all_weapons))
+        equipped_weapon = self.client.get_item(self.client.get_characters_data(self.character.name)["weapon_slot"])
+        weapon_in_inventory.append(equipped_weapon)
+
+        best_weapon = None
+        best_effective_damage = 0
+
+        for weapon in weapon_in_inventory:
+            total_damage = 0
+            for effect in weapon['effects']:
+                attack_type = effect['name']
+                attack_value = effect['value']
+                resistance = self.monster.get(attack_type.replace('attack_', 'res_'), 0)
+
+                damage_reduction = attack_value * (resistance * 0.1)
+                effective_damage = attack_value - damage_reduction
+
+                total_damage += max(0, effective_damage)
+
+            if total_damage > best_effective_damage:
+                best_effective_damage = total_damage
+                best_weapon = weapon
+        return best_weapon
+
 
 class DepositTask(Task):
-    def __init__(self, character: TMPCharacter, *items):
+    def __init__(self, character: TMPCharacter):
         super().__init__(character, 0)
-        self.items = items
         self.location = Locations.BANK
 
     async def __call__(self):
         await super().__call__()
         with open(f"logs/{self.character.name}.log", "a", encoding="utf-8") as logfile:
-            for item in self.items:
+            inventory_item_codes = [item["code"] for item in self.client.get_char_inventory(self.character.name)]
+            for item in inventory_item_codes:
+                if item in self.character.persistent_inventory + list(self.character.tools.values()):
+                    continue
                 amount = self._get_collected_amount(item=item)
                 if not amount:
                     continue
